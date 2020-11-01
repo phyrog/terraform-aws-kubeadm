@@ -11,6 +11,7 @@ resource "random_pet" "cluster_name" {}
 locals {
   cluster_name = var.cluster_name != null ? var.cluster_name : random_pet.cluster_name.id
   tags         = merge(var.tags, { "terraform-kubeadm:cluster" = local.cluster_name })
+  install_count = var.install_kubernetes ? 1 : 0
 }
 
 #------------------------------------------------------------------------------#
@@ -164,6 +165,7 @@ resource "aws_instance" "master" {
   apt-get update
   apt-get install -y docker.io kubeadm
 
+  %{if var.install_kubernetes~}
   # Run kubeadm
   kubeadm init \
     --token "${local.token}" \
@@ -181,6 +183,7 @@ resource "aws_instance" "master" {
 
   # Indicate completion of bootstrapping on this node
   touch /home/ubuntu/done
+  %{endif~}
   EOF
 }
 
@@ -208,6 +211,7 @@ resource "aws_instance" "workers" {
   apt-get update
   apt-get install -y docker.io kubeadm
 
+  %{if var.install_kubernetes~}
   # Run kubeadm
   kubeadm join ${aws_instance.master.private_ip}:6443 \
     --token ${local.token} \
@@ -216,6 +220,7 @@ resource "aws_instance" "workers" {
 
   # Indicate completion of bootstrapping on this node
   touch /home/ubuntu/done
+  %{endif~}
   EOF
 }
 
@@ -224,6 +229,9 @@ resource "aws_instance" "workers" {
 #------------------------------------------------------------------------------#
 
 resource "null_resource" "wait_for_bootstrap_to_finish" {
+
+  count = local.install_count
+
   provisioner "local-exec" {
     command = <<-EOF
     alias ssh='ssh -q -i ${var.private_key_file} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
@@ -251,13 +259,38 @@ locals {
 }
 
 resource "null_resource" "download_kubeconfig_file" {
+
+  count = local.install_count
+
   provisioner "local-exec" {
     command = <<-EOF
     alias scp='scp -q -i ${var.private_key_file} -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
     scp ubuntu@${aws_eip.master.public_ip}:/home/ubuntu/admin.conf ${local.kubeconfig_file} >/dev/null
     EOF
   }
+
   triggers = {
-    wait_for_bootstrap_to_finish = null_resource.wait_for_bootstrap_to_finish.id
+    wait_for_bootstrap_to_finish = null_resource.wait_for_bootstrap_to_finish[0].id
+  }
+}
+
+#------------------------------------------------------------------------------#
+# Install Flannel as overlay network
+#------------------------------------------------------------------------------#
+
+resource "null_resource" "install_flannel" {
+
+  count = local.install_count
+
+  provisioner "local-exec" {
+    command = <<-EOF
+    alias kubectl='KUBECONFIG=${self.triggers.kubeconfig_file} kubectl'
+    kubectl apply -f flannel.yaml
+    EOF
+  }
+
+  triggers = {
+    kubeconfig_file = local.kubeconfig_file
+    download_kubeconfig_file = null_resource.download_kubeconfig_file[0].id
   }
 }

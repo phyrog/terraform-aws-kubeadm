@@ -55,7 +55,7 @@ variable "allowed_k8s_cidr_blocks" {
 variable "pod_network_cidr_block" {
   type        = string
   description = "**This is an optional variable with a default value of null**. CIDR block for the Pod network of the cluster. If set, Kubernetes automatically allocates Pod subnet IP address ranges to the nodes (i.e. sets the \".spec.podCIDR\" field of the node objects). If null, the cluster is created without an explicitly determined Pod network IP address range, and the nodes are not allocated any Pod subnet IP address ranges (i.e. the \".spec.podCIDR\" field of the nodes is not set)."
-  default     = null
+  default     = "10.244.0.0/16"
 }
 
 variable "master_instance_type" {
@@ -80,4 +80,9 @@ variable "tags" {
   type        = map(string)
   description = "A set of tags to assign to the created AWS resources. These tags will be assigned in addition to the default tags. The default tags include \"terraform-kubeadm:cluster\" which is assigned to all resources and whose value is the cluster name, and \"terraform-kubeadm:node\" which is assigned to the EC2 instances and whose value is the name of the Kubernetes node that this EC2 corresponds to."
   default     = {}
+}
+
+variable "install_kubernetes" {
+  type        = bool
+  default     = false
 }
