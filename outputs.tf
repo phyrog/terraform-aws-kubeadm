@@ -21,6 +21,10 @@ output "cluster_nodes" {
 }
 
 output "vpc_id" {
-  value       = aws_security_group.egress.vpc_id
+  value       = data.aws_vpc.current.id
   description = "ID of the VPC in which the cluster has been created."
+}
+
+output "subnet_tags" {
+  value = local.joined_tags_list
 }
